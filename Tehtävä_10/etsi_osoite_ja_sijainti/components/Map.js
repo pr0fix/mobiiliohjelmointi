@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import { fetchCoordinates } from "../services/mapApi";
+import * as Location from "expo-location";
 
 export default function Map() {
   const [address, setAddress] = useState("");
@@ -20,25 +21,46 @@ export default function Map() {
   });
   const [marker, setMarker] = useState(null);
 
-  const handlePress = async () => {
-    Keyboard.dismiss();
-
-    const data = await fetchCoordinates({ address });
-    if (data && data.length > 0) {
-      const { lat, lon } = data[0];
-      const newCoordinates = {
-        latitude: parseFloat(lat),
-        longitude: parseFloat(lon),
-      };
-
+  useEffect(() => {
+    (async () => {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("No permission to get location");
+        return;
+      }
+      const location = await Location.getCurrentPositionAsync();
       setRegion({
-        ...newCoordinates,
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
         latitudeDelta: 0.0322,
         longitudeDelta: 0.0221,
       });
-      setMarker(newCoordinates);
-    } else {
-      Alert.alert("Location not found", "Please enter a valid address.");
+    })();
+  }, []);
+
+  const handlePress = async () => {
+    Keyboard.dismiss();
+    try {
+      const data = await fetchCoordinates({ address });
+      if (data && data.length > 0) {
+        const { lat, lon } = data[0];
+        const newCoordinates = {
+          latitude: parseFloat(lat),
+          longitude: parseFloat(lon),
+        };
+
+        setRegion({
+          ...newCoordinates,
+          latitudeDelta: 0.0322,
+          longitudeDelta: 0.0221,
+        });
+        setMarker(newCoordinates);
+      } else {
+        Alert.alert("Location not found", "Please enter a valid address.");
+      }
+    } catch (error) {
+      Alert.alert("Error", "Failed to fetch coordinates. Please try again.");
+      console.error("Error fetching coordinates", error);
     }
 
     setAddress("");
@@ -46,7 +68,12 @@ export default function Map() {
 
   return (
     <View>
-      <MapView style={styles.mapView} loadingEnabled={true} region={region}>
+      <MapView
+        style={styles.mapView}
+        loadingEnabled={true}
+        region={region}
+        showsUserLocation={true}
+      >
         {marker && <Marker coordinate={marker} title="Location" />}
       </MapView>
       <View style={styles.searchContainer}>
